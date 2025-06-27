@@ -7,7 +7,6 @@ mod status;
 
 use clap::Parser;
 use std::error::Error;
-use tokio;
 
 use crate::cli::Cli;
 use crate::github::GitHubGQL;
@@ -38,7 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         Err(e) => {
             status.finish(None);
-            eprintln!("Error: {}", e);
+            eprintln!("Error: {e}");
             return Err(e as Box<dyn Error>);
         }
     };

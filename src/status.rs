@@ -40,7 +40,7 @@ impl StatusIndicator {
     pub fn update_message(&self, message: &str) {
         // For simplicity, we'll just print a new line with the updated message
         // In a more sophisticated implementation, you could use channels to communicate with the spinner thread
-        println!("\n{}", message);
+        println!("\n{message}");
     }
 
     pub fn finish(&mut self, final_message: Option<&str>) {
@@ -51,7 +51,7 @@ impl StatusIndicator {
         }
 
         if let Some(msg) = final_message {
-            println!("{}", msg);
+            println!("{msg}");
         }
     }
 }

@@ -37,7 +37,7 @@ fn truncate_description(description: &str) -> String {
 }
 
 pub fn generate_output(stars: Vec<Repository>, cli: &Cli) {
-    println!("{}", DESC);
+    println!("{DESC}");
 
     let mut repo_dict: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
 
@@ -61,7 +61,7 @@ pub fn generate_output(stars: Vec<Repository>, cli: &Cli) {
             };
 
             for category in categories {
-                repo_dict.entry(category).or_insert_with(Vec::new).push((
+                repo_dict.entry(category).or_default().push((
                     star.name.clone(),
                     star.url.clone(),
                     description.clone(),
@@ -74,7 +74,7 @@ pub fn generate_output(stars: Vec<Repository>, cli: &Cli) {
                 star.language.clone()
             };
 
-            repo_dict.entry(category).or_insert_with(Vec::new).push((
+            repo_dict.entry(category).or_default().push((
                 star.name.clone(),
                 star.url.clone(),
                 description.clone(),
@@ -85,7 +85,7 @@ pub fn generate_output(stars: Vec<Repository>, cli: &Cli) {
     // Print table of contents
     for category in repo_dict.keys() {
         let anchor = category.to_lowercase().replace(' ', "-");
-        println!("- [{}](#{})", category, anchor);
+        println!("- [{category}](#{anchor})");
     }
     println!();
 
@@ -93,7 +93,7 @@ pub fn generate_output(stars: Vec<Repository>, cli: &Cli) {
     for (category, repos) in &repo_dict {
         println!("## {} \n", category.replace('#', "# #"));
         for (name, url, description) in repos {
-            println!("- [{}]({}) - {}", name, url, description);
+            println!("- [{name}]({url}) - {description}");
         }
         println!();
     }

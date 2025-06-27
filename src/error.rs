@@ -17,7 +17,7 @@ impl Error for StarredError {}
 impl From<reqwest::Error> for StarredError {
     fn from(err: reqwest::Error) -> Self {
         StarredError {
-            message: format!("HTTP request error: {}", err),
+            message: format!("HTTP request error: {err}"),
         }
     }
 }
@@ -25,7 +25,7 @@ impl From<reqwest::Error> for StarredError {
 impl From<serde_json::Error> for StarredError {
     fn from(err: serde_json::Error) -> Self {
         StarredError {
-            message: format!("JSON parsing error: {}", err),
+            message: format!("JSON parsing error: {err}"),
         }
     }
 }
@@ -33,7 +33,7 @@ impl From<serde_json::Error> for StarredError {
 impl From<reqwest::Error> for Box<StarredError> {
     fn from(err: reqwest::Error) -> Self {
         Box::new(StarredError {
-            message: format!("HTTP request error: {}", err),
+            message: format!("HTTP request error: {err}"),
         })
     }
 }
@@ -41,7 +41,7 @@ impl From<reqwest::Error> for Box<StarredError> {
 impl From<serde_json::Error> for Box<StarredError> {
     fn from(err: serde_json::Error) -> Self {
         Box::new(StarredError {
-            message: format!("JSON parsing error: {}", err),
+            message: format!("JSON parsing error: {err}"),
         })
     }
 }
