@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     ));
 
     let stars = match gh
-        .get_user_starred_by_username(&cli.username, None, cli.topic_limit, &status)
+        .get_user_starred_by_username(&cli.username, cli.limit, cli.topic_limit, &status)
         .await
     {
         Ok(stars) => {
