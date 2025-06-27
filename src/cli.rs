@@ -25,19 +25,41 @@ pub struct Cli {
     #[arg(long, default_value_t = 500)]
     pub topic_limit: i32,
 
-    /// Repository name
+    /// Limit the number of repositories to fetch (useful for debugging)
+    #[arg(long)]
+    pub limit: Option<usize>,
+
+    /// Output format: console (default) or markdown
+    #[arg(long, value_enum, default_value = "console")]
+    pub output: OutputFormat,
+
+    /// Output directory for markdown files (when using markdown output)
+    #[arg(long, default_value = "./awesome-stars")]
+    pub output_dir: String,
+
+    /// Maximum file size for markdown files in KB (default: 500KB)
+    #[arg(long, default_value_t = 500)]
+    pub max_file_size_kb: usize,
+
+    /// Repository name (for GitHub integration - not implemented)
     #[arg(long, default_value = "")]
     pub repository: String,
 
-    /// File name
+    /// File name (for GitHub integration - not implemented)
     #[arg(long, default_value = "README.md")]
     pub filename: String,
 
-    /// Commit message
+    /// Commit message (for GitHub integration - not implemented)
     #[arg(long, default_value = "update awesome-stars, created by starred")]
     pub message: String,
 
     /// Include private repos
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub private: bool,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum OutputFormat {
+    Console,
+    Markdown,
 }
