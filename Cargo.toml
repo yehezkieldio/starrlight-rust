@@ -2,6 +2,19 @@
 name = "starrlight"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+description = "Effortlessly create Awesome List from your GitHub stars."
+authors = ["Yehezkiel Dio Sinolungan <yehezkieldio@proton.me>"]
+license = "MIT"
+keywords = ["cli", "tool", "utility", "github", "stars", "awesome-list"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+repository = "https://github.com/yehezkieldio/starrlight"
+homepage = "https://github.com/yehezkieldio/starrlight"
+
+[[bin]]
+name = "starrlight"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5.40", features = ["derive", "env"] }
