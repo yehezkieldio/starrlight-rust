@@ -15,7 +15,7 @@ impl GitHubGQL {
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", token)).unwrap(),
+            HeaderValue::from_str(&format!("Bearer {token}")).unwrap(),
         );
         headers.insert(USER_AGENT, HeaderValue::from_static("starred-rust/0.1.0"));
 
