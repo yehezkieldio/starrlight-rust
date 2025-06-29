@@ -492,104 +492,104 @@ impl CacheManager {
     }
 
     /// Get cached ETag for a specific page (for conditional requests)
-    pub fn get_cached_page_etag(&self, cache_key: &str, page_number: usize) -> Result<Option<String>, Box<StarredError>> {
-        if let Some(session_metadata) = self.get_session_metadata(cache_key)? {
-            if let Some(page_metadata) = session_metadata.pages.get(&page_number) {
-                return Ok(page_metadata.etag.clone());
-            }
-        }
-        Ok(None)
-    }
+    // pub fn get_cached_page_etag(&self, cache_key: &str, page_number: usize) -> Result<Option<String>, Box<StarredError>> {
+    //     if let Some(session_metadata) = self.get_session_metadata(cache_key)? {
+    //         if let Some(page_metadata) = session_metadata.pages.get(&page_number) {
+    //             return Ok(page_metadata.etag.clone());
+    //         }
+    //     }
+    //     Ok(None)
+    // }
 
     /// Get cached ETag for the first page (for legacy compatibility)
-    pub fn get_cached_etag(
-        &self,
-        username: &str,
-        limit: Option<usize>,
-        topic_limit: i32,
-        include_private: bool,
-    ) -> Result<Option<String>, Box<StarredError>> {
-        let cache_key = self.generate_cache_key(username, limit, topic_limit, include_private);
+    // pub fn get_cached_etag(
+    //     &self,
+    //     username: &str,
+    //     limit: Option<usize>,
+    //     topic_limit: i32,
+    //     include_private: bool,
+    // ) -> Result<Option<String>, Box<StarredError>> {
+    //     let cache_key = self.generate_cache_key(username, limit, topic_limit, include_private);
 
-        // Try new format first
-        if let Some(etag) = self.get_cached_page_etag(&cache_key, 1)? {
-            return Ok(Some(etag));
-        }
+    //     // Try new format first
+    //     if let Some(etag) = self.get_cached_page_etag(&cache_key, 1)? {
+    //         return Ok(Some(etag));
+    //     }
 
-        // Fall back to legacy format
-        let cache_file = self.config.cache_dir.join(format!("{}.json", cache_key));
-        if !cache_file.exists() {
-            return Ok(None);
-        }
+    //     // Fall back to legacy format
+    //     let cache_file = self.config.cache_dir.join(format!("{}.json", cache_key));
+    //     if !cache_file.exists() {
+    //         return Ok(None);
+    //     }
 
-        let lock_file = self.get_lock_file_path(&cache_key);
-        let _lock = self.acquire_lock(&lock_file)?;
+    //     let lock_file = self.get_lock_file_path(&cache_key);
+    //     let _lock = self.acquire_lock(&lock_file)?;
 
-        let mut file = File::open(&cache_file).map_err(|e| {
-            Box::new(StarredError {
-                message: format!("Failed to open legacy cache file: {}", e),
-            })
-        })?;
+    //     let mut file = File::open(&cache_file).map_err(|e| {
+    //         Box::new(StarredError {
+    //             message: format!("Failed to open legacy cache file: {}", e),
+    //         })
+    //     })?;
 
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).map_err(|e| {
-            Box::new(StarredError {
-                message: format!("Failed to read legacy cache file: {}", e),
-            })
-        })?;
+    //     let mut contents = String::new();
+    //     file.read_to_string(&mut contents).map_err(|e| {
+    //         Box::new(StarredError {
+    //             message: format!("Failed to read legacy cache file: {}", e),
+    //         })
+    //     })?;
 
-        let cached_data: LegacyCachedData = serde_json::from_str(&contents).map_err(|e| {
-            Box::new(StarredError {
-                message: format!("Failed to parse legacy cache file: {}", e),
-            })
-        })?;
+    //     let cached_data: LegacyCachedData = serde_json::from_str(&contents).map_err(|e| {
+    //         Box::new(StarredError {
+    //             message: format!("Failed to parse legacy cache file: {}", e),
+    //         })
+    //     })?;
 
-        Ok(cached_data.metadata.etag)
-    }
+    //     Ok(cached_data.metadata.etag)
+    // }
 
     /// Legacy method for backward compatibility
-    pub fn cache_repositories(
-        &self,
-        username: &str,
-        limit: Option<usize>,
-        topic_limit: i32,
-        include_private: bool,
-        repositories: Vec<Repository>,
-        etag: Option<String>,
-        rate_limit_remaining: Option<u32>,
-        rate_limit_reset: Option<DateTime<Utc>>,
-    ) -> Result<(), Box<StarredError>> {
-        // Convert to page-based caching
-        let page_size = 100; // Standard GraphQL page size
-        let mut page_number = 1;
-        let mut start_index = 0;
+    // pub fn cache_repositories(
+    //     &self,
+    //     username: &str,
+    //     limit: Option<usize>,
+    //     topic_limit: i32,
+    //     include_private: bool,
+    //     repositories: Vec<Repository>,
+    //     etag: Option<String>,
+    //     rate_limit_remaining: Option<u32>,
+    //     rate_limit_reset: Option<DateTime<Utc>>,
+    // ) -> Result<(), Box<StarredError>> {
+    //     // Convert to page-based caching
+    //     let page_size = 100; // Standard GraphQL page size
+    //     let mut page_number = 1;
+    //     let mut start_index = 0;
 
-        while start_index < repositories.len() {
-            let end_index = (start_index + page_size).min(repositories.len());
-            let page_repositories = repositories[start_index..end_index].to_vec();
-            let has_next_page = end_index < repositories.len();
+    //     while start_index < repositories.len() {
+    //         let end_index = (start_index + page_size).min(repositories.len());
+    //         let page_repositories = repositories[start_index..end_index].to_vec();
+    //         let has_next_page = end_index < repositories.len();
 
-            self.cache_page(
-                username,
-                limit,
-                topic_limit,
-                include_private,
-                page_number,
-                page_repositories,
-                None, // cursor not available in legacy format
-                None, // next_cursor not available
-                has_next_page,
-                if page_number == 1 { etag.clone() } else { None },
-                rate_limit_remaining,
-                rate_limit_reset,
-            )?;
+    //         self.cache_page(
+    //             username,
+    //             limit,
+    //             topic_limit,
+    //             include_private,
+    //             page_number,
+    //             page_repositories,
+    //             None, // cursor not available in legacy format
+    //             None, // next_cursor not available
+    //             has_next_page,
+    //             if page_number == 1 { etag.clone() } else { None },
+    //             rate_limit_remaining,
+    //             rate_limit_reset,
+    //         )?;
 
-            start_index = end_index;
-            page_number += 1;
-        }
+    //         start_index = end_index;
+    //         page_number += 1;
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     /// Clear cache for a specific user/configuration
     pub fn clear_cache(
