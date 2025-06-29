@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use crate::cli::{Cli, OutputFormat};
@@ -243,6 +244,304 @@ fn output_to_markdown(repo_dict: BTreeMap<String, Vec<(String, String, String)>>
     Ok(())
 }
 
+/// Streaming markdown writer that processes repositories one-by-one
+/// and writes directly to output files, tracking size on-the-fly
+pub struct StreamingMarkdownWriter {
+    cli: Cli,
+    max_file_size: usize,
+    current_writer: Option<BufWriter<File>>,
+    current_file_size: usize,
+    file_number: usize,
+    files_created: Vec<String>,
+    categories: BTreeMap<String, Vec<(String, String, String)>>,
+    // current_category: Option<String>,
+}
+
+impl StreamingMarkdownWriter {
+    pub fn new(cli: Cli) -> Result<Self, Box<dyn std::error::Error>> {
+        // Create output directory if it doesn't exist
+        fs::create_dir_all(&cli.output_dir)?;
+
+        let max_file_size = cli.max_file_size_kb * 1024;
+
+        Ok(Self {
+            cli,
+            max_file_size,
+            current_writer: None,
+            current_file_size: 0,
+            file_number: 1,
+            files_created: Vec::new(),
+            categories: BTreeMap::new(),
+            // current_category: None,
+        })
+    }
+
+    /// Process a single repository and write it to the appropriate output
+    pub fn process_repository(&mut self, repo: Repository) -> Result<(), Box<dyn std::error::Error>> {
+        // Skip private repos if --private is not set
+        if repo.is_private && !self.cli.private {
+            return Ok(());
+        }
+
+        let description = if repo.description.is_empty() {
+            String::new()
+        } else {
+            truncate_description(&repo.description)
+        };
+
+        if self.cli.topic {
+            let categories = if repo.topics.is_empty() {
+                vec![DEFAULT_CATEGORY.to_lowercase()]
+            } else {
+                repo.topics.clone()
+            };
+
+            for category in categories {
+                self.categories.entry(category).or_default().push((
+                    repo.name.clone(),
+                    repo.url.clone(),
+                    description.clone(),
+                ));
+            }
+        } else {
+            let category = if repo.language.is_empty() {
+                DEFAULT_CATEGORY.to_string()
+            } else {
+                repo.language.clone()
+            };
+
+            self.categories.entry(category).or_default().push((
+                repo.name.clone(),
+                repo.url.clone(),
+                description.clone(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Finalize the writing process and create all output files
+    pub fn finalize(mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Sort repositories within each category if requested
+        if self.cli.sort {
+            for repos in self.categories.values_mut() {
+                repos.sort_by(|a, b| a.0.cmp(&b.0));
+            }
+        }
+
+        // Now write using the streaming approach
+        self.write_streaming_output()
+    }
+
+    fn write_streaming_output(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Initialize first file
+        self.start_new_file()?;
+
+        // Write header and TOC
+        self.write_header_and_toc()?;
+
+        // Clone categories to avoid borrow issues
+        let categories = self.categories.clone();
+
+        // Write categories one by one
+        for (category, repos) in &categories {
+            self.write_category(category, repos)?;
+        }
+
+        // Finalize current file
+        self.finalize_current_file()?;
+
+        // Create index if multiple files
+        if self.files_created.len() > 1 {
+            self.create_index_file()?;
+        }
+
+        println!("\n✅ Successfully generated {} markdown file(s) in '{}'",
+                self.files_created.len(), self.cli.output_dir);
+
+        Ok(())
+    }
+
+    fn start_new_file(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let filename = if self.file_number == 1 {
+            "README.md".to_string()
+        } else {
+            format!("README-part-{}.md", self.file_number)
+        };
+
+        let filepath = Path::new(&self.cli.output_dir).join(&filename);
+        let file = File::create(&filepath)?;
+        self.current_writer = Some(BufWriter::new(file));
+        self.current_file_size = 0;
+
+        // Write appropriate header
+        let header = if self.file_number == 1 {
+            DESC.to_string()
+        } else {
+            PAGINATION_HEADER.replace("{part}", &self.file_number.to_string())
+        };
+
+        self.write_to_current_file(&header)?;
+        println!("Created: {}", filepath.display());
+
+        Ok(())
+    }
+
+    fn write_header_and_toc(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.file_number == 1 {
+            // Generate and write table of contents for first file
+            let toc = generate_table_of_contents(&self.categories);
+            self.write_to_current_file(&toc)?;
+        } else {
+            // Write navigation for subsequent files
+            let mut nav = "## Navigation\n\n".to_string();
+            for (i, created_file) in self.files_created.iter().enumerate() {
+                let part_num = if i == 0 { 1 } else { i + 1 };
+                nav.push_str(&format!("- [Part {}]({})\n", part_num, created_file));
+            }
+            nav.push('\n');
+            self.write_to_current_file(&nav)?;
+        }
+
+        Ok(())
+    }
+
+    fn write_category(&mut self, category: &str, repos: &[(String, String, String)]) -> Result<(), Box<dyn std::error::Error>> {
+        let category_content = generate_category_content(category, repos);
+        let category_size = category_content.len();
+
+        // Check if we need to split to a new file
+        if self.current_file_size + category_size > self.max_file_size && self.current_file_size > 0 {
+            self.finalize_current_file()?;
+            self.file_number += 1;
+            self.start_new_file()?;
+            self.write_header_and_toc()?;
+        }
+
+        self.write_to_current_file(&category_content)?;
+        Ok(())
+    }
+
+    fn write_to_current_file(&mut self, content: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref mut writer) = self.current_writer {
+            writer.write_all(content.as_bytes())?;
+            self.current_file_size += content.len();
+        }
+        Ok(())
+    }
+
+    fn finalize_current_file(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref mut writer) = self.current_writer {
+            // Write license
+            let license_content = LICENSE.replace("{username}", &self.cli.username);
+            writer.write_all(license_content.as_bytes())?;
+            writer.flush()?;
+
+            let filename = if self.file_number == 1 {
+                "README.md".to_string()
+            } else {
+                format!("README-part-{}.md", self.file_number)
+            };
+            self.files_created.push(filename);
+        }
+
+        self.current_writer = None;
+        Ok(())
+    }
+
+    fn create_index_file(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut index_content = format!(
+            "# Awesome Stars Index\n\n> Generated by [starrlight](https://github.com/yehezkieldio/starrlight) for [{username}](https://github.com/{username})\n\n",
+            username = self.cli.username
+        );
+        index_content.push_str("This awesome list has been split into multiple files due to size constraints:\n\n");
+
+        for (i, filename) in self.files_created.iter().enumerate() {
+            let part_num = i + 1;
+            index_content.push_str(&format!("- [Part {}]({})\n", part_num, filename));
+        }
+
+        let index_path = Path::new(&self.cli.output_dir).join("index.md");
+        fs::write(&index_path, &index_content)?;
+        println!("Created index: {}", index_path.display());
+
+        Ok(())
+    }
+}
+
+/// Streaming console writer that processes repositories one-by-one
+pub struct StreamingConsoleWriter {
+    cli: Cli,
+    categories: BTreeMap<String, Vec<(String, String, String)>>,
+}
+
+impl StreamingConsoleWriter {
+    pub fn new(cli: Cli) -> Self {
+        Self {
+            cli,
+            categories: BTreeMap::new(),
+        }
+    }
+
+    /// Process a single repository
+    pub fn process_repository(&mut self, repo: Repository) -> Result<(), Box<dyn std::error::Error>> {
+        // Skip private repos if --private is not set
+        if repo.is_private && !self.cli.private {
+            return Ok(());
+        }
+
+        let description = if repo.description.is_empty() {
+            String::new()
+        } else {
+            truncate_description(&repo.description)
+        };
+
+        if self.cli.topic {
+            let categories = if repo.topics.is_empty() {
+                vec![DEFAULT_CATEGORY.to_lowercase()]
+            } else {
+                repo.topics.clone()
+            };
+
+            for category in categories {
+                self.categories.entry(category).or_default().push((
+                    repo.name.clone(),
+                    repo.url.clone(),
+                    description.clone(),
+                ));
+            }
+        } else {
+            let category = if repo.language.is_empty() {
+                DEFAULT_CATEGORY.to_string()
+            } else {
+                repo.language.clone()
+            };
+
+            self.categories.entry(category).or_default().push((
+                repo.name.clone(),
+                repo.url.clone(),
+                description.clone(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Finalize and output to console
+    pub fn finalize(mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Sort repositories within each category if requested
+        if self.cli.sort {
+            for repos in self.categories.values_mut() {
+                repos.sort_by(|a, b| a.0.cmp(&b.0));
+            }
+        }
+
+        output_to_console(self.categories, &self.cli);
+        Ok(())
+    }
+}
+
+/// Generate output based on the given stars and CLI options
 pub fn generate_output(stars: Vec<Repository>, cli: &Cli) {
     let repo_dict = organize_repositories(stars, cli);
 
@@ -257,3 +556,27 @@ pub fn generate_output(stars: Vec<Repository>, cli: &Cli) {
         }
     }
 }
+
+// Streaming version that processes repositories one-by-one without holding them all in memory
+// pub fn generate_output_streaming<I>(repos: I, cli: &Cli) -> Result<(), Box<dyn std::error::Error>>
+// where
+//     I: IntoIterator<Item = Repository>,
+// {
+//     match cli.output {
+//         OutputFormat::Console => {
+//             let mut writer = StreamingConsoleWriter::new(cli.clone());
+//             for repo in repos {
+//                 writer.process_repository(repo)?;
+//             }
+//             writer.finalize()?;
+//         }
+//         OutputFormat::Markdown => {
+//             let mut writer = StreamingMarkdownWriter::new(cli.clone())?;
+//             for repo in repos {
+//                 writer.process_repository(repo)?;
+//             }
+//             writer.finalize()?;
+//         }
+//     }
+//     Ok(())
+// }

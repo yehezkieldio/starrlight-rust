@@ -82,31 +82,98 @@ async fn main() -> Result<(), Box<dyn Error>> {
         cli.username
     ));
 
-    let stars = match gh
-        .get_user_starred_by_username(
-            &cli.username,
-            cli.limit,
-            cli.topic_limit,
-            cli.private,
-            &mut status
-        )
-        .await
-    {
-        Ok(stars) => {
-            status.finish(Some(&format!(
-                "Successfully processed {} repositories!",
-                stars.len()
-            )));
-            stars
-        }
-        Err(e) => {
-            status.finish(None);
-            eprintln!("Error: {e}");
-            return Err(e as Box<dyn Error>);
-        }
-    };
+    // Choose between streaming and non-streaming modes
+    if cli.no_streaming {
+        // Original non-streaming approach
+        let stars = match gh
+            .get_user_starred_by_username(
+                &cli.username,
+                cli.limit,
+                cli.topic_limit,
+                cli.private,
+                &mut status
+            )
+            .await
+        {
+            Ok(stars) => {
+                status.finish(Some(&format!(
+                    "Successfully processed {} repositories!",
+                    stars.len()
+                )));
+                stars
+            }
+            Err(e) => {
+                status.finish(None);
+                eprintln!("Error: {e}");
+                return Err(e as Box<dyn Error>);
+            }
+        };
 
-    generate_output(stars, &cli);
+        generate_output(stars, &cli);
+    } else {
+        // New streaming approach - memory efficient
+        status.update_message("Initializing streaming output...");
+
+        let cli_for_stream = cli.clone();
+        match cli.output {
+            crate::cli::OutputFormat::Markdown => {
+                let mut writer = crate::output::StreamingMarkdownWriter::new(cli_for_stream)?;
+                let mut repo_count = 0;
+
+                let result = gh.get_user_starred_by_username_streaming(
+                    &cli.username,
+                    cli.limit,
+                    cli.topic_limit,
+                    cli.private,
+                    &mut status,
+                    |repo| {
+                        repo_count += 1;
+                        writer.process_repository(repo)
+                    }
+                ).await;
+
+                match result {
+                    Ok(_) => {
+                        writer.finalize()?;
+                        status.finish(Some(&format!("Successfully processed {} repositories in streaming mode!", repo_count)));
+                    }
+                    Err(e) => {
+                        status.finish(None);
+                        eprintln!("Error: {e}");
+                        return Err(e as Box<dyn Error>);
+                    }
+                }
+            }
+            crate::cli::OutputFormat::Console => {
+                let mut writer = crate::output::StreamingConsoleWriter::new(cli_for_stream);
+                let mut repo_count = 0;
+
+                let result = gh.get_user_starred_by_username_streaming(
+                    &cli.username,
+                    cli.limit,
+                    cli.topic_limit,
+                    cli.private,
+                    &mut status,
+                    |repo| {
+                        repo_count += 1;
+                        writer.process_repository(repo)
+                    }
+                ).await;
+
+                match result {
+                    Ok(_) => {
+                        writer.finalize()?;
+                        status.finish(Some(&format!("Successfully processed {} repositories in streaming mode!", repo_count)));
+                    }
+                    Err(e) => {
+                        status.finish(None);
+                        eprintln!("Error: {e}");
+                        return Err(e as Box<dyn Error>);
+                    }
+                }
+            }
+        }
+    }
 
     Ok(())
 }

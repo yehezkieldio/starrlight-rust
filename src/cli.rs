@@ -2,7 +2,7 @@ use clap::Parser;
 
 const VERSION: &str = "0.1.0";
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 #[command(author, version = VERSION, about, long_about = None)]
 pub struct Cli {
     /// GitHub username
@@ -72,6 +72,10 @@ pub struct Cli {
     /// Skip cache validation (use cached data even if it might be stale)
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub skip_cache_validation: bool,
+
+    /// Use streaming mode for memory-efficient processing (default: true)
+    #[arg(long, action = clap::ArgAction::SetFalse)]
+    pub no_streaming: bool,
 
     /// Cache management commands
     #[command(subcommand)]
