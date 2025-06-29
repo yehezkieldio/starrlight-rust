@@ -23,8 +23,6 @@ reqwest = { version = "0.12.20", features = ["json"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tokio = { version = "1.45.1", features = ["full"] }
-# Caching dependencies
 sha2 = "0.10.8"
 chrono = { version = "0.4.38", features = ["serde"] }
 fs4 = "0.8.4"
-thiserror = "2.0.12"

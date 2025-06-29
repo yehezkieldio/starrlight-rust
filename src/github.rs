@@ -1,4 +1,4 @@
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT, IF_NONE_MATCH};
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use serde_json::json;
 
 use crate::error::StarredError;
@@ -148,68 +148,6 @@ impl GitHubGQL {
         Ok(all_repositories)
     }
 
-    async fn make_conditional_request(
-        &self,
-        username: &str,
-        limit: Option<usize>,
-        topic_stargazer_count_limit: i32,
-        include_private: bool,
-        etag: &str,
-        status: &mut StatusIndicator,
-    ) -> Result<Option<Vec<Repository>>, Box<StarredError>> {
-        // For GraphQL, we'll make a lightweight query to check if data has changed
-        let query = r#"
-            query ($username: String!) {
-                user(login: $username) {
-                    starredRepositories(first: 1) {
-                        totalCount
-                    }
-                }
-            }
-        "#;
-
-        let variables = json!({
-            "username": username
-        });
-
-        let request_body = json!({
-            "query": query,
-            "variables": variables
-        });
-
-        let mut headers = HeaderMap::new();
-        headers.insert(IF_NONE_MATCH, HeaderValue::from_str(etag).unwrap());
-
-        let response = self
-            .client
-            .post(&self.api_url)
-            .headers(headers)
-            .json(&request_body)
-            .send()
-            .await?;
-
-        // If 304 Not Modified, use cached data
-        if response.status() == 304 {
-            if let Some(cache_manager) = &self.cache_manager {
-                if let Some(cached_repos) = cache_manager.get_cached_repositories(
-                    username,
-                    limit,
-                    topic_stargazer_count_limit,
-                    include_private,
-                )? {
-                    status.finish(Some(&format!(
-                        "Data unchanged - using cached {} repositories!",
-                        cached_repos.len()
-                    )));
-                    return Ok(Some(cached_repos));
-                }
-            }
-        }
-
-        // Data has changed, return None to trigger full fetch
-        Ok(None)
-    }
-
     async fn fetch_repositories_from_api(
         &self,
         username: &str,
@@ -332,9 +270,9 @@ impl GitHubGQL {
                                     after.clone(),
                                     starred_repos.page_info.end_cursor.clone(),
                                     starred_repos.page_info.has_next_page,
-                                    None, // ETags not supported in GraphQL
-                                    None, // Rate limit info not available here
-                                    None, // Rate limit reset not available here
+                                    None, // ETag not applicable for GraphQL POST requests
+                                    None, // Rate limit info not available in GraphQL response
+                                    None, // Rate limit reset not available in GraphQL response
                                 );
                             }
                         }
@@ -392,9 +330,9 @@ impl GitHubGQL {
                         after.clone(),
                         starred_repos.page_info.end_cursor.clone(),
                         starred_repos.page_info.has_next_page,
-                        None, // ETags not supported in GraphQL
-                        None, // Rate limit info not available here
-                        None, // Rate limit reset not available here
+                        None, // ETag not applicable for GraphQL POST requests
+                        None, // Rate limit info not available in GraphQL response
+                        None, // Rate limit reset not available in GraphQL response
                     );
                 }
             }
