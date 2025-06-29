@@ -646,7 +646,7 @@ impl GitHubGQL {
                 after = starred_repos.page_info.end_cursor.clone();
                 current_page += 1;
                 // Rate limiting - be nice to GitHub's API
-                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(1200)).await;
             } else {
                 break;
             }
