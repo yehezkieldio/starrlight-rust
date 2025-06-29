@@ -56,10 +56,44 @@ pub struct Cli {
     /// Include private repos
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub private: bool,
+
+    /// Refresh cache and bypass all cached data
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub refresh: bool,
+
+    /// Cache directory path (default: $HOME/.cache/starrlight)
+    #[arg(long)]
+    pub cache_dir: Option<String>,
+
+    /// Cache expiration time in hours (default: 24)
+    #[arg(long, default_value_t = 24)]
+    pub cache_expiry_hours: u64,
+
+    /// Skip cache validation (use cached data even if it might be stale)
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub skip_cache_validation: bool,
+
+    /// Cache management commands
+    #[command(subcommand)]
+    pub cache: Option<CacheCommand>,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub enum OutputFormat {
     Console,
     Markdown,
+}
+
+#[derive(clap::Subcommand, Clone, Debug)]
+pub enum CacheCommand {
+    /// Show cache statistics
+    Stats,
+    /// Clear cache for a specific user
+    Clear {
+        /// GitHub username to clear cache for
+        #[arg(long)]
+        username: String,
+    },
+    /// Clear all cache files
+    ClearAll,
 }

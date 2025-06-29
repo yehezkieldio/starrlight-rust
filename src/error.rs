@@ -45,3 +45,19 @@ impl From<serde_json::Error> for Box<StarredError> {
         })
     }
 }
+
+impl From<std::io::Error> for StarredError {
+    fn from(err: std::io::Error) -> Self {
+        StarredError {
+            message: format!("IO error: {err}"),
+        }
+    }
+}
+
+impl From<std::io::Error> for Box<StarredError> {
+    fn from(err: std::io::Error) -> Self {
+        Box::new(StarredError {
+            message: format!("IO error: {err}"),
+        })
+    }
+}
