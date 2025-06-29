@@ -188,7 +188,7 @@ fn output_to_markdown(repo_dict: BTreeMap<String, Vec<(String, String, String)>>
             // Start new file
             file_number += 1;
             current_file_content = PAGINATION_HEADER.replace("{part}", &file_number.to_string());
-            current_file_size = current_file_content.len();
+            // current_file_size = current_file_content.len();
 
             // Add navigation to other parts
             current_file_content.push_str("## Navigation\n\n");
