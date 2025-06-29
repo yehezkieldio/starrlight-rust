@@ -39,8 +39,13 @@ fn html_escape(text: &str) -> String {
 fn truncate_description(description: &str) -> String {
     let escaped = html_escape(description);
     let cleaned = escaped.replace('\n', "").trim().to_string();
-    if cleaned.len() > TEXT_LENGTH_LIMIT {
-        format!("{}...", &cleaned[..TEXT_LENGTH_LIMIT])
+    if cleaned.chars().count() > TEXT_LENGTH_LIMIT {
+        let end_byte_index = cleaned
+            .char_indices()
+            .nth(TEXT_LENGTH_LIMIT)
+            .map(|(idx, _)| idx)
+            .unwrap_or(cleaned.len());
+        format!("{}...", &cleaned[..end_byte_index])
     } else {
         cleaned
     }
